@@ -8,7 +8,7 @@ import SettingsDialog from "./SettingsDialog";
 type View = { kind: "group"; id: string } | { kind: "all" } | { kind: "stats" };
 
 export default function App() {
-  const { state, refresh } = useAppState();
+  const { state, refresh, error } = useAppState();
   const [view, setView] = useState<View>({ kind: "all" });
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -39,7 +39,9 @@ export default function App() {
       .sort((a, b) => (a.name || a.trigger).localeCompare(b.name || b.trigger));
   }, [lib, view, query]);
 
-  if (!state || !lib) return <div className="loading">Loading…</div>;
+  if (!state || !lib) {
+    return <div className="loading">{error ? `Failed to load: ${error}` : "Loading…"}</div>;
+  }
 
   const flash = (m: string) => {
     setToast(m);
@@ -96,7 +98,7 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <span className="logo">C</span> Snipr
+          <span className="logo">S</span> Snipr
         </div>
 
         <button className={"pill " + (state.enabled ? "on" : "off")} onClick={() => api.setEnabled(!state.enabled)}>
@@ -111,7 +113,7 @@ export default function App() {
             <em>{lib.snippets.length}</em>
           </div>
           <div className="nav-label">
-            Groups <button className="icon" title="New group" onClick={addGroup}>＋</button>
+            Groups <button className="icon" title="New group" onClick={addGroup}>+</button>
           </div>
           {lib.groups.map((g) => (
             <div
@@ -183,7 +185,7 @@ export default function App() {
             <div className="list-head">
               <input placeholder="Search…" value={query} onChange={(e) => setQuery(e.target.value)} />
               <button className="primary" onClick={startNew}>
-                ＋ New
+                New snippet
               </button>
             </div>
             <div className="rows">
