@@ -89,6 +89,14 @@ export default function SettingsDialog({ settings, libraryFile, version, onClose
             Restore clipboard after pasting
           </label>
           <label className="check">
+            <input type="checkbox" checked={s.soundOnExpand} onChange={(e) => set("soundOnExpand", e.target.checked)} />
+            Play a sound when a snippet expands
+          </label>
+          <label className="check" title="Types the text after #{cursor} so the caret lands exactly, even in rich-text editors">
+            <input type="checkbox" checked={s.exactCursor} onChange={(e) => set("exactCursor", e.target.checked)} />
+            Place the cursor exactly (types the text after the cursor position)
+          </label>
+          <label className="check">
             <input type="checkbox" checked={s.allowShell} onChange={(e) => set("allowShell", e.target.checked)} />
             Allow <code>#{"{shell:…}"}</code> variables to run PowerShell commands (only enable for libraries you trust)
           </label>

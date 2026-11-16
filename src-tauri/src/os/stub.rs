@@ -16,6 +16,8 @@ pub fn app_name_for(_h: isize) -> Option<String> {
 pub fn wait_modifiers_released() {}
 pub fn send_backspaces(_n: usize) {}
 pub fn send_text(_s: &str) {}
+pub fn send_text_soft(_s: &str) {}
 pub fn send_combo(_spec: &str) {}
 pub fn send_paste() {}
 pub fn send_left(_n: usize) {}
+pub fn play_sound() {}

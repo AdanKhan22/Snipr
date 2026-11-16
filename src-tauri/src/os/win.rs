@@ -8,7 +8,8 @@ use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use windows::core::PWSTR;
+use windows::core::{PCWSTR, PWSTR};
+use windows::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT};
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::{
@@ -238,6 +239,46 @@ pub fn send_left(n: usize) {
     tap(VK_LEFT, n);
 }
 
+static WAV: OnceLock<Vec<u8>> = OnceLock::new();
+
+/// A short, soft "pop" synthesised in memory (no asset files needed).
+fn pop_wav() -> &'static Vec<u8> {
+    WAV.get_or_init(|| {
+        let rate = 44_100u32;
+        let samples = (rate as f32 * 0.09) as usize;
+        let mut pcm: Vec<u8> = Vec::with_capacity(samples * 2);
+        for i in 0..samples {
+            let t = i as f32 / rate as f32;
+            let freq = 520.0 + 700.0 * (1.0 - (t / 0.09)); // quick downward chirp
+            let env = (-t * 48.0).exp() * (1.0 - (-t * 900.0).exp());
+            let v = (2.0 * std::f32::consts::PI * freq * t).sin() * env * 0.35;
+            pcm.extend_from_slice(&((v * i16::MAX as f32) as i16).to_le_bytes());
+        }
+        let mut w = Vec::with_capacity(44 + pcm.len());
+        w.extend_from_slice(b"RIFF");
+        w.extend_from_slice(&(36 + pcm.len() as u32).to_le_bytes());
+        w.extend_from_slice(b"WAVEfmt ");
+        w.extend_from_slice(&16u32.to_le_bytes());
+        w.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        w.extend_from_slice(&1u16.to_le_bytes()); // mono
+        w.extend_from_slice(&rate.to_le_bytes());
+        w.extend_from_slice(&(rate * 2).to_le_bytes());
+        w.extend_from_slice(&2u16.to_le_bytes());
+        w.extend_from_slice(&16u16.to_le_bytes());
+        w.extend_from_slice(b"data");
+        w.extend_from_slice(&(pcm.len() as u32).to_le_bytes());
+        w.extend_from_slice(&pcm);
+        w
+    })
+}
+
+pub fn play_sound() {
+    let wav = pop_wav();
+    unsafe {
+        let _ = PlaySoundW(PCWSTR(wav.as_ptr() as *const u16), None, SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
+    }
+}
+
 pub fn send_paste() {
     send(&[
         vk_input(VK_CONTROL, false),
@@ -249,13 +290,29 @@ pub fn send_paste() {
 
 /// Types text as Unicode keystrokes (no clipboard). Newlines become Enter.
 pub fn send_text(s: &str) {
+    type_text(s, false);
+}
+
+/// Like `send_text` but newlines are Shift+Enter, so chat apps insert a line break
+/// instead of sending the message.
+pub fn send_text_soft(s: &str) {
+    type_text(s, true);
+}
+
+fn type_text(s: &str, soft_newline: bool) {
     let mut v = vec![];
     for c in s.chars() {
         match c {
             '\r' => {}
             '\n' => {
+                if soft_newline {
+                    v.push(vk_input(VK_SHIFT, false));
+                }
                 v.push(vk_input(VK_RETURN, false));
                 v.push(vk_input(VK_RETURN, true));
+                if soft_newline {
+                    v.push(vk_input(VK_SHIFT, true));
+                }
             }
             _ => {
                 let mut b = [0u16; 2];

@@ -165,6 +165,10 @@ pub struct Settings {
     pub toggle_hotkey: String,
     pub paste_method: PasteMethod,
     pub restore_clipboard: bool,
+    pub sound_on_expand: bool,
+    /// Type the text after `#{cursor}` instead of pasting it, so the caret lands exactly
+    /// in place even in rich-text editors that reshape pasted line breaks.
+    pub exact_cursor: bool,
     pub allow_shell: bool,
     pub autostart: bool,
     pub start_hidden: bool,
@@ -182,6 +186,8 @@ impl Default for Settings {
             toggle_hotkey: "Ctrl+Alt+Shift+P".into(),
             paste_method: PasteMethod::Paste,
             restore_clipboard: true,
+            sound_on_expand: true,
+            exact_cursor: true,
             allow_shell: false,
             autostart: false,
             start_hidden: false,

@@ -373,6 +373,9 @@ fn perform(sh: &Arc<Shared>, snip: &Snippet, delete: usize, captures: Vec<String
         parts.push(Part::Text(d.to_string()));
     }
 
+    if settings.sound_on_expand {
+        os::play_sound();
+    }
     os::wait_modifiers_released();
     thread::sleep(Duration::from_millis(40));
     if delete > 0 {
@@ -401,48 +404,72 @@ fn set_clipboard(text: &str) {
 
 fn inject(parts: &[Part], settings: &Settings) {
     let mut saved: Option<Saved> = None;
-    let mut seen_cursor = false;
-    let mut after = 0usize;
-    for p in parts {
-        match p {
-            Part::Text(t) => {
-                if seen_cursor {
-                    after += t.chars().filter(|c| *c != '\r').count();
+
+    // Text and cursor markers between two key presses are inserted as one block, so a
+    // cursor in the middle of a snippet never splits it into several pastes.
+    //
+    // With a cursor, the text before it is pasted and the text after it is typed (when
+    // `exact_cursor` is on): rich editors reshape pasted line breaks, which makes counting
+    // Left-arrow presses unreliable, whereas typed characters move the caret predictably.
+    let paste = |text: &str, saved: &mut Option<Saved>| {
+        if text.is_empty() {
+            return;
+        }
+        match settings.paste_method {
+            PasteMethod::Type => os::send_text(text),
+            PasteMethod::Paste => {
+                if saved.is_none() {
+                    *saved = Some(match arboard::Clipboard::new() {
+                        Ok(mut c) => match c.get_text() {
+                            Ok(txt) => Saved::Text(txt),
+                            Err(_) => c.get_image().map(Saved::Image).unwrap_or(Saved::Nothing),
+                        },
+                        Err(_) => Saved::Nothing,
+                    });
                 }
-                match settings.paste_method {
-                    PasteMethod::Type => os::send_text(t),
-                    PasteMethod::Paste => {
-                        if saved.is_none() {
-                            saved = Some(match arboard::Clipboard::new() {
-                                Ok(mut c) => match c.get_text() {
-                                    Ok(txt) => Saved::Text(txt),
-                                    Err(_) => c.get_image().map(Saved::Image).unwrap_or(Saved::Nothing),
-                                },
-                                Err(_) => Saved::Nothing,
-                            });
-                        }
-                        set_clipboard(t);
-                        thread::sleep(Duration::from_millis(30));
-                        os::send_paste();
-                        // Browsers read the clipboard asynchronously; give them time.
-                        thread::sleep(Duration::from_millis(150));
+                set_clipboard(text);
+                thread::sleep(Duration::from_millis(30));
+                os::send_paste();
+                // Browsers read the clipboard asynchronously; give them time.
+                thread::sleep(Duration::from_millis(150));
+            }
+        }
+    };
+    let flush = |text: &mut String, cursor_at: &mut Option<usize>, saved: &mut Option<Saved>| {
+        match cursor_at.take() {
+            Some(idx) => {
+                let (before, after) = text.split_at(idx);
+                paste(before, saved);
+                if !after.is_empty() {
+                    if settings.exact_cursor && settings.paste_method == PasteMethod::Paste {
+                        os::send_text_soft(after);
+                    } else {
+                        paste(after, saved);
                     }
+                    thread::sleep(Duration::from_millis(30));
+                    os::send_left(after.chars().filter(|c| *c != '\r').count());
                 }
             }
+            None => paste(text, saved),
+        }
+        text.clear();
+    };
+
+    let mut text = String::new();
+    let mut cursor_at: Option<usize> = None;
+    for p in parts {
+        match p {
+            Part::Text(t) => text.push_str(t),
+            Part::Cursor => cursor_at = Some(text.len()),
             Part::Key(k) => {
+                flush(&mut text, &mut cursor_at, &mut saved);
                 os::send_combo(k);
                 thread::sleep(Duration::from_millis(25));
             }
-            Part::Cursor => {
-                seen_cursor = true;
-                after = 0;
-            }
         }
     }
-    if seen_cursor && after > 0 {
-        thread::sleep(Duration::from_millis(30));
-        os::send_left(after);
-    }
+    flush(&mut text, &mut cursor_at, &mut saved);
+
     if settings.restore_clipboard {
         thread::sleep(Duration::from_millis(400));
         match saved {

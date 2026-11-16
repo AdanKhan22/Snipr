@@ -43,6 +43,8 @@ export interface Settings {
   toggleHotkey: string;
   pasteMethod: PasteMethod;
   restoreClipboard: boolean;
+  soundOnExpand: boolean;
+  exactCursor: boolean;
   allowShell: boolean;
   autostart: boolean;
   startHidden: boolean;
