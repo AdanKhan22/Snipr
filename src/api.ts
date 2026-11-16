@@ -24,7 +24,21 @@ export const api = {
 /** Loads app state and keeps it fresh when the backend reports changes. */
 export function useAppState() {
   const [state, setState] = useState<AppStateDto | null>(null);
-  const refresh = useCallback(() => api.getState().then(setState).catch(console.error), []);
+  const [error, setError] = useState<string>("");
+  const refresh = useCallback(
+    () =>
+      api
+        .getState()
+        .then((s) => {
+          setError("");
+          setState(s);
+        })
+        .catch((e) => {
+          console.error(e);
+          setError(String(e));
+        }),
+    [],
+  );
 
   useEffect(() => {
     refresh();
@@ -34,7 +48,7 @@ export function useAppState() {
     };
   }, [refresh]);
 
-  return { state, refresh };
+  return { state, refresh, error };
 }
 
 export function applyTheme(theme: string) {
