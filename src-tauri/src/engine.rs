@@ -377,13 +377,15 @@ fn perform(sh: &Arc<Shared>, snip: &Snippet, delete: usize, captures: Vec<String
         os::play_sound();
     }
     os::wait_modifiers_released();
-    thread::sleep(Duration::from_millis(40));
+    thread::sleep(Duration::from_millis(15));
     if delete > 0 {
         os::send_backspaces(delete);
-        thread::sleep(Duration::from_millis(60));
+        thread::sleep(Duration::from_millis(30));
     }
     inject(&parts, &settings);
-    crate::commands::record_use(&sh.app, &snip.id);
+    // Stats are written off the hot path so the next keystroke isn't delayed by disk I/O.
+    let (app, id) = (sh.app.clone(), snip.id.clone());
+    thread::spawn(move || crate::commands::record_use(&app, &id));
 }
 
 enum Saved {
@@ -428,10 +430,10 @@ fn inject(parts: &[Part], settings: &Settings) {
                     });
                 }
                 set_clipboard(text);
-                thread::sleep(Duration::from_millis(30));
+                thread::sleep(Duration::from_millis(15));
                 os::send_paste();
-                // Browsers read the clipboard asynchronously; give them time.
-                thread::sleep(Duration::from_millis(150));
+                // Browsers read the clipboard asynchronously; give them a moment.
+                thread::sleep(Duration::from_millis(90));
             }
         }
     };
@@ -439,15 +441,18 @@ fn inject(parts: &[Part], settings: &Settings) {
         match cursor_at.take() {
             Some(idx) => {
                 let (before, after) = text.split_at(idx);
-                paste(before, saved);
-                if !after.is_empty() {
-                    if settings.exact_cursor && settings.paste_method == PasteMethod::Paste {
-                        os::send_text_soft(after);
-                    } else {
-                        paste(after, saved);
-                    }
-                    thread::sleep(Duration::from_millis(30));
-                    os::send_left(after.chars().filter(|c| *c != '\r').count());
+                let n = after.chars().filter(|c| *c != '\r').count();
+                // Typing is slow in heavy editors, so only do it when line breaks make
+                // counting caret steps unreliable; otherwise paste everything in one go.
+                if settings.exact_cursor && settings.paste_method == PasteMethod::Paste && after.contains('\n') {
+                    paste(before, saved);
+                    os::send_text_soft(after);
+                } else {
+                    paste(text, saved);
+                }
+                if n > 0 {
+                    thread::sleep(Duration::from_millis(20));
+                    os::send_left(n);
                 }
             }
             None => paste(text, saved),
@@ -470,20 +475,23 @@ fn inject(parts: &[Part], settings: &Settings) {
     }
     flush(&mut text, &mut cursor_at, &mut saved);
 
-    if settings.restore_clipboard {
-        thread::sleep(Duration::from_millis(400));
-        match saved {
-            Some(Saved::Text(t)) => {
-                if let Ok(mut c) = arboard::Clipboard::new() {
-                    let _ = c.set_text(t);
+    if settings.restore_clipboard && saved.is_some() {
+        // Restore later and off-thread: slow apps may still be reading the clipboard.
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(350));
+            match saved {
+                Some(Saved::Text(t)) => {
+                    if let Ok(mut c) = arboard::Clipboard::new() {
+                        let _ = c.set_text(t);
+                    }
                 }
-            }
-            Some(Saved::Image(img)) => {
-                if let Ok(mut c) = arboard::Clipboard::new() {
-                    let _ = c.set_image(img);
+                Some(Saved::Image(img)) => {
+                    if let Ok(mut c) = arboard::Clipboard::new() {
+                        let _ = c.set_image(img);
+                    }
                 }
+                _ => {}
             }
-            _ => {}
-        }
+        });
     }
 }

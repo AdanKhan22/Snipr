@@ -181,12 +181,12 @@ pub fn wait_modifiers_released() {
 // ------------------------------------------------------------------ injection
 
 fn send(inputs: &[INPUT]) {
-    for chunk in inputs.chunks(48) {
+    for chunk in inputs.chunks(128) {
         unsafe {
             SendInput(chunk, size_of::<INPUT>() as i32);
         }
-        if inputs.len() > 48 {
-            thread::sleep(Duration::from_millis(2));
+        if inputs.len() > 128 {
+            thread::sleep(Duration::from_millis(1));
         }
     }
 }
