@@ -374,10 +374,10 @@ fn perform(sh: &Arc<Shared>, snip: &Snippet, delete: usize, captures: Vec<String
     }
 
     os::wait_modifiers_released();
-    thread::sleep(Duration::from_millis(25));
+    thread::sleep(Duration::from_millis(40));
     if delete > 0 {
         os::send_backspaces(delete);
-        thread::sleep(Duration::from_millis(20));
+        thread::sleep(Duration::from_millis(60));
     }
     inject(&parts, &settings);
     crate::commands::record_use(&sh.app, &snip.id);
@@ -422,9 +422,10 @@ fn inject(parts: &[Part], settings: &Settings) {
                             });
                         }
                         set_clipboard(t);
-                        thread::sleep(Duration::from_millis(15));
+                        thread::sleep(Duration::from_millis(30));
                         os::send_paste();
-                        thread::sleep(Duration::from_millis(70));
+                        // Browsers read the clipboard asynchronously; give them time.
+                        thread::sleep(Duration::from_millis(150));
                     }
                 }
             }
@@ -443,7 +444,7 @@ fn inject(parts: &[Part], settings: &Settings) {
         os::send_left(after);
     }
     if settings.restore_clipboard {
-        thread::sleep(Duration::from_millis(80));
+        thread::sleep(Duration::from_millis(400));
         match saved {
             Some(Saved::Text(t)) => {
                 if let Ok(mut c) = arboard::Clipboard::new() {
