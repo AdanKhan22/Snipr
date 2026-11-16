@@ -4,7 +4,18 @@ import { useEffect, useState, useCallback } from "react";
 import type { AppStateDto, Group, Settings, Snippet } from "./types";
 
 export const api = {
-  getState: () => invoke<AppStateDto>("get_state"),
+  // The webview can finish loading before the backend's setup hook has registered
+  // its state, so retry briefly instead of failing on startup.
+  getState: async (): Promise<AppStateDto> => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await invoke<AppStateDto>("get_state");
+      } catch (e) {
+        if (attempt >= 40 || !String(e).includes("not managed")) throw e;
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    }
+  },
   saveSnippet: (snippet: Snippet) => invoke<void>("save_snippet", { snippet }),
   deleteSnippets: (ids: string[]) => invoke<void>("delete_snippets", { ids }),
   moveSnippets: (ids: string[], groupId: string) => invoke<void>("move_snippets", { ids, groupId }),
