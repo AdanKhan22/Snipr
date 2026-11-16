@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for all Snipr windows",
+  "windows": ["main", "picker", "prompt"],
+  "permissions": ["core:default", "dialog:default"]
+}
